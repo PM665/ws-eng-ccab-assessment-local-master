@@ -32,8 +32,7 @@ async function charge(account: string, charges: number): Promise<ChargeResult> {
     try {
         const balance = parseInt((await client.get(`${account}/balance`)) ?? "");
         if (balance >= charges) {
-            await client.set(`${account}/balance`, balance - charges);
-            const remainingBalance = parseInt((await client.get(`${account}/balance`)) ?? "");
+            const remainingBalance = (await client.decrBy(`${account}/balance`, charges));
             return { isAuthorized: true, remainingBalance, charges };
         } else {
             return { isAuthorized: false, remainingBalance: balance, charges: 0 };
