@@ -10,7 +10,7 @@ const params = {
 const initialBalance= 100
 const vus = 10
 const iterations = 10
-const chargeAmount = 1
+const chargeAmount = 100
 export let options = {
     scenarios: {
         main_scenario: {
@@ -24,12 +24,12 @@ let expectedCharged = iterations * chargeAmount
 
 export function setup() {
     const payload0 = {
-        account: "test"
+        account: "test1"
     };
     http.post("http://localhost:3000/reset", JSON.stringify(payload0), params);
 
     const payload = {
-        account: "test",
+        account: "test1",
         charges: 0
     };
     const res = http.post("http://localhost:3000/charge",
@@ -46,7 +46,7 @@ export function setup() {
 
 export default function() {
     const payload = {
-        account: "test",
+        account: "test1",
         charges: chargeAmount
     };
     const res = http.post("http://localhost:3000/charge",
@@ -65,14 +65,14 @@ export default function() {
 
 export function teardown() {
     const payload = {
-        account: "test",
+        account: "test1",
         charges: 0
     };
     const res = http.post("http://localhost:3000/charge",
       JSON.stringify(payload), params);
 
     let result = JSON.parse(res.body);
-    let expectedBalance = initialBalance - expectedCharged;
+    let expectedBalance = Math.max(0, initialBalance - expectedCharged)
     console.log(
       `Final balance is: ${result.remainingBalance}; Expected balance is ${expectedBalance} (${initialBalance} - ${expectedCharged})`);
 

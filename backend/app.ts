@@ -1,8 +1,17 @@
 import express from "express";
-import { createClient } from "redis";
+import { createClient, defineScript } from "redis";
 import { json } from "body-parser";
+import * as fs from "fs";
 
 const DEFAULT_BALANCE = 100;
+let checkAndChargeScript = {
+    script: fs.readFileSync('./luaScripts/checkAndCharge.lua', 'utf8'),
+    sha: ""
+};
+
+interface CheckInChargeClient {
+    checkAndCharge(account: string, charge: number): Promise<string>;
+}
 
 interface ChargeResult {
     isAuthorized: boolean;
@@ -10,10 +19,22 @@ interface ChargeResult {
     charges: number;
 }
 
-async function connect(): Promise<ReturnType<typeof createClient>> {
+async function connect(): Promise<ReturnType<typeof createClient> & CheckInChargeClient> {
     const url = `redis://${process.env.REDIS_HOST ?? "localhost"}:${process.env.REDIS_PORT ?? "6379"}`;
     console.log(`Using redis URL ${url}`);
-    const client = createClient({ url });
+    const client = createClient({ url: url,
+        scripts: {
+            checkAndCharge: defineScript({
+                NUMBER_OF_KEYS: 1,
+                SCRIPT: checkAndChargeScript.script,
+                transformArguments(account, charge) {
+                    return [account, charge.toString()];
+                },
+                transformReply(reply: any, preserved?: any): string {
+                    return reply
+                }
+            }),
+        }});
     await client.connect();
     return client;
 }
@@ -30,12 +51,13 @@ async function reset(account: string): Promise<void> {
 async function charge(account: string, charges: number): Promise<ChargeResult> {
     const client = await connect();
     try {
-        const balance = parseInt((await client.get(`${account}/balance`)) ?? "");
-        if (balance >= charges) {
-            const remainingBalance = (await client.decrBy(`${account}/balance`, charges));
-            return { isAuthorized: true, remainingBalance, charges };
+
+        const result = await client.checkAndCharge(`${account}/balance`, charges);
+        const remainingBalance: number =  parseInt(result ?? "")
+        if (remainingBalance || result == "0") {
+            return { isAuthorized: true, remainingBalance: remainingBalance, charges };
         } else {
-            return { isAuthorized: false, remainingBalance: balance, charges: 0 };
+            return { isAuthorized: false, remainingBalance: parseInt((await client.get(`${account}/balance`)) ?? ""), charges: 0 };
         }
     } finally {
         await client.disconnect();
